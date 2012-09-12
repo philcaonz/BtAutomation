@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.IBinder;
+import android.util.Log;
 
 /**
  * Created with IntelliJ IDEA.
@@ -47,7 +48,8 @@ public class BtAutomationService extends Service {
                     BluetoothAdapter.ACTION_STATE_CHANGED)) {
 
                 intent.getExtras().get(BluetoothAdapter.EXTRA_STATE);
-                
+                Log.v("BtAutomationService", "State change!!!!!!!");
+
             }
         }
     };
