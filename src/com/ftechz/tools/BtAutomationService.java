@@ -134,8 +134,40 @@ public class BtAutomationService extends Service
     private BtAutomationStateMachine stateMachine = new BtAutomationStateMachine();
     private class BtAutomationStateMachine extends State<EventInfo>
     {
+        public void SyncState(EventInfo eventInfo)
+        {
+            if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_OFF)
+                    || (eventInfo.bluetoothState == BluetoothAdapter.STATE_TURNING_ON) ) {
+                this.ChangeState(this.inactiveState);
+            }
+            else {
+                if (eventInfo.screenOn) {
+                    switch (eventInfo.bluetoothState) {
+                        case BluetoothAdapter.STATE_CONNECTED:
+                            this.activeState.ChangeState(this.activeState.connectedState);
+                            break;
+                        case BluetoothAdapter.STATE_CONNECTING:
+                            this.activeState.ChangeState(this.activeState.connectingState);
+                            break;
+                        case BluetoothAdapter.STATE_TURNING_OFF:
+                        case BluetoothAdapter.STATE_DISCONNECTED:
+                        case BluetoothAdapter.STATE_DISCONNECTING:
+                        case BluetoothAdapter.STATE_ON:
+                            this.activeState.ChangeState(this.activeState.searchingState);
+                            break;
+                    }
+                }
+                else {
+                    this.activeState.ChangeState(this.activeState.pendingDisconnectState);
+                }
+
+                this.ChangeState(this.activeState);
+            }
+        }
+
         @Override
-        protected void EventHandler(EventInfo info) throws EventHandledException {
+        protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+        {
 
         }
 
@@ -167,13 +199,13 @@ public class BtAutomationService extends Service
             }
 
             @Override
-            protected void EventHandler(EventInfo info) throws EventHandledException
+            protected void EventHandler(EventInfo eventInfo) throws EventHandledException
             {
                 // Transition to active state
-                if (mEventInfo.lastIntentString.equals(BT_EVENT_INTENT)
-                        | mEventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
-                    if ((mEventInfo.bluetoothState == BluetoothAdapter.STATE_ON)
-                            && !mEventInfo.wifiConnected) {
+                if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)
+                        | eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
+                    if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_ON)
+                            && !eventInfo.wifiConnected) {
                         BtAutomationStateMachine.this.ChangeState(
                                 BtAutomationStateMachine.this.activeState);
                         this.EventHandled();
