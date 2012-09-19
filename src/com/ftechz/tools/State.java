@@ -1,5 +1,7 @@
 package com.ftechz.tools;
 
+import android.util.Log;
+
 /**
  *
  */
@@ -70,7 +72,7 @@ public abstract class State<infoObject>
      */
     protected void EnterState()
     {
-
+        Log.d("Entered state: %s", this.getClass().getName());
     }
 
     /**
@@ -81,6 +83,8 @@ public abstract class State<infoObject>
         if (mCurrentState != null) {
             mCurrentState.ExitState();
         }
+
+        Log.d("Exited state: %s", this.getClass().getName());
     }
 
     /**

@@ -18,6 +18,8 @@ import android.os.IBinder;
  */
 public class BtAutomationService extends Service
 {
+    final String WIFI_EVENT_INTENT = WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION;
+    final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
 
     public class EventInfo
     {
@@ -27,9 +29,10 @@ public class BtAutomationService extends Service
         boolean screenOn;
     }
 
-    public EventInfo eventInfo = new EventInfo();
+    public EventInfo mEventInfo = new EventInfo();
 
-    BluetoothAdapter mBluetoothAdapter;
+    private BluetoothAdapter mBluetoothAdapter;
+    private WifiManager mWifiManager;
 
     @Override
     public void onCreate()
@@ -46,15 +49,22 @@ public class BtAutomationService extends Service
 
         }
 
-        // Initial state
+        mWifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+
+        // Get the initial event statuses
+        mEventInfo.bluetoothState = mBluetoothAdapter.getState();
+        mEventInfo.wifiConnected = mWifiManager.pingSupplicant();
+
+        stateMachine.ChangeState(stateMachine.inactiveState);
+
         registerReceiver(displayActionReceiver,
                 new IntentFilter(Intent.ACTION_SCREEN_ON));
         registerReceiver(displayActionReceiver,
                 new IntentFilter(Intent.ACTION_SCREEN_OFF));
         registerReceiver(btActionReceiver,
-                new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));
+                new IntentFilter(BT_EVENT_INTENT));
         registerReceiver(wifiActionReceiver,
-                new IntentFilter(WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION));
+                new IntentFilter(WIFI_EVENT_INTENT));
 
     }
 
@@ -64,14 +74,16 @@ public class BtAutomationService extends Service
         public void onReceive(Context context, Intent intent)
         {
             if (intent.getAction().equals( Intent.ACTION_SCREEN_ON)) {
-                eventInfo.screenOn = true;
+                mEventInfo.screenOn = true;
 
             } else if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
-                eventInfo.screenOn = false;
+                mEventInfo.screenOn = false;
 
             }
 
-            // TODO Signal event
+            mEventInfo.lastIntentString = intent.getAction();
+            // Signal state machine
+            stateMachine.HandleEvent(mEventInfo);
         }
     };
 
@@ -80,12 +92,14 @@ public class BtAutomationService extends Service
         @Override
         public void onReceive(Context context, Intent intent)
         {
-            if (intent.getAction().equals(
-                    WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION)) {
-                eventInfo.wifiConnected = intent.getBooleanExtra(
+            if (intent.getAction().equals(WIFI_EVENT_INTENT)) {
+                mEventInfo.wifiConnected = intent.getBooleanExtra(
                         WifiManager.EXTRA_SUPPLICANT_CONNECTED, false);
 
-                // TODO Signal event
+                mEventInfo.lastIntentString = intent.getAction();
+
+                // Signal state machine
+                stateMachine.HandleEvent(mEventInfo);
             }
         }
     };
@@ -95,13 +109,14 @@ public class BtAutomationService extends Service
         @Override
         public void onReceive(Context context, Intent intent)
         {
-            if (intent.getAction().equals(
-                    BluetoothAdapter.ACTION_STATE_CHANGED)) {
-                eventInfo.bluetoothState = intent.getIntExtra(
+            if (intent.getAction().equals(BT_EVENT_INTENT)) {
+                mEventInfo.bluetoothState = intent.getIntExtra(
                         BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF);
-            }
 
-            // TODO Signal event
+                mEventInfo.lastIntentString = intent.getAction();
+                // Signal state machine
+                stateMachine.HandleEvent(mEventInfo);
+            }
         }
     };
 
@@ -126,6 +141,7 @@ public class BtAutomationService extends Service
 
         @Override
         protected void EnterState() {
+            this.ChangeState(inactiveState);
             super.EnterState();
         }
 
@@ -135,29 +151,39 @@ public class BtAutomationService extends Service
         }
 
 
-        private InactiveState inactiveState = new InactiveState();
-        private class InactiveState extends State<EventInfo>
+        public InactiveState inactiveState = new InactiveState();
+        public class InactiveState extends State<EventInfo>
         {
             @Override
-            protected void EnterState() {
+            protected void EnterState()
+            {
                 super.EnterState();
             }
 
             @Override
-            protected void ExitState() {
+            protected void ExitState()
+            {
                 super.ExitState();
             }
 
             @Override
-            protected void EventHandler(EventInfo info) throws EventHandledException {
-                
+            protected void EventHandler(EventInfo info) throws EventHandledException
+            {
+                // Transition to active state
+                if (mEventInfo.lastIntentString.equals(BT_EVENT_INTENT)
+                        | mEventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
+                    if ((mEventInfo.bluetoothState == BluetoothAdapter.STATE_ON)
+                            && !mEventInfo.wifiConnected) {
+                        BtAutomationStateMachine.this.ChangeState(
+                                BtAutomationStateMachine.this.activeState);
+                        this.EventHandled();
+                    }
+                }
             }
         }
 
-
-
-        private ActiveState activeState = new ActiveState();
-        private class ActiveState extends State<EventInfo>
+        public ActiveState activeState = new ActiveState();
+        public class ActiveState extends State<EventInfo>
         {
             @Override
             protected void EnterState()
@@ -166,9 +192,18 @@ public class BtAutomationService extends Service
             }
 
             @Override
-            protected void EventHandler(EventInfo eventInfo)
+            protected void EventHandler(EventInfo eventInfo) throws EventHandledException
             {
-
+                // Transition to inactive state
+                if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)
+                        | eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
+                    if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_OFF)
+                            || eventInfo.wifiConnected) {
+                            BtAutomationStateMachine.this.ChangeState(
+                                    BtAutomationStateMachine.this.inactiveState);
+                            this.EventHandled();
+                    }
+                }
             }
 
             /**
@@ -194,7 +229,8 @@ public class BtAutomationService extends Service
                 {
                     // Move to unconnectedState using same conditions as pendingDisconnectState
 
-                    if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                    // Transition to Connecting state
+                    if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
                         if (eventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTING) {
                             ActiveState.this.ChangeState(ActiveState.this.connectingState);
                         }
@@ -210,13 +246,14 @@ public class BtAutomationService extends Service
                 @Override
                 protected void EventHandler(EventInfo eventInfo) throws EventHandledException
                 {
-                    if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                    if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
                         switch (eventInfo.bluetoothState) {
                             case BluetoothAdapter.STATE_CONNECTED:
+                                // Transition to Connected state
                                 ActiveState.this.ChangeState(ActiveState.this.connectedState);
                                 break;
                             case BluetoothAdapter.STATE_DISCONNECTED:
-                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                                ActiveState.this.ChangeState(ActiveState.this.searchingState);
                                 break;
                         }
                     }
@@ -236,7 +273,7 @@ public class BtAutomationService extends Service
                     if (!eventInfo.screenOn) {
                         ActiveState.this.ChangeState(ActiveState.this.pendingDisconnectState);
                     }
-                    else if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                    else if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
                         switch (eventInfo.bluetoothState) {
                             case BluetoothAdapter.STATE_CONNECTED:
                                 ActiveState.this.ChangeState(ActiveState.this.connectedState);
