@@ -8,7 +8,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.wifi.WifiManager;
 import android.os.IBinder;
-import android.util.Log;
 
 /**
  * Created with IntelliJ IDEA.
@@ -27,6 +26,8 @@ public class BtAutomationService extends Service
         boolean wifiConnected;
         boolean screenOn;
     }
+
+    public EventInfo eventInfo = new EventInfo();
 
     BluetoothAdapter mBluetoothAdapter;
 
@@ -62,12 +63,15 @@ public class BtAutomationService extends Service
         @Override
         public void onReceive(Context context, Intent intent)
         {
-            if (intent.getAction().equals(
-                    Intent.ACTION_SCREEN_ON)) {
+            if (intent.getAction().equals( Intent.ACTION_SCREEN_ON)) {
+                eventInfo.screenOn = true;
 
-            } else if (intent.getAction().equals(
-                    Intent.ACTION_SCREEN_OFF)) {
+            } else if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
+                eventInfo.screenOn = false;
+
             }
+
+            // TODO Signal event
         }
     };
 
@@ -78,12 +82,10 @@ public class BtAutomationService extends Service
         {
             if (intent.getAction().equals(
                     WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION)) {
-                boolean wifiConnected = intent.getBooleanExtra(WifiManager.EXTRA_SUPPLICANT_CONNECTED, false);
-                if (wifiConnected) {
+                eventInfo.wifiConnected = intent.getBooleanExtra(
+                        WifiManager.EXTRA_SUPPLICANT_CONNECTED, false);
 
-                } else {
-
-                }
+                // TODO Signal event
             }
         }
     };
@@ -95,18 +97,11 @@ public class BtAutomationService extends Service
         {
             if (intent.getAction().equals(
                     BluetoothAdapter.ACTION_STATE_CHANGED)) {
-                int btState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF);
-                switch (btState) {
-                    case BluetoothAdapter.STATE_OFF:
-                        break;
-                    case BluetoothAdapter.STATE_ON:
-                        break;
-                    case BluetoothAdapter.STATE_CONNECTED:
-                        break;
-                    case BluetoothAdapter.STATE_DISCONNECTED:
-                        break;
-                }
+                eventInfo.bluetoothState = intent.getIntExtra(
+                        BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF);
             }
+
+            // TODO Signal event
         }
     };
 
@@ -117,100 +112,207 @@ public class BtAutomationService extends Service
     }
 
 
-    private class ActiveState extends State<EventInfo>
+    /**
+     * State Machine!
+     */
+
+    private BtAutomationStateMachine stateMachine = new BtAutomationStateMachine();
+    private class BtAutomationStateMachine extends State<EventInfo>
     {
-        public State currentState;
-
         @Override
-        public void EnterState()
-        {
-            currentState = searchingState;
+        protected void EventHandler(EventInfo info) throws EventHandledException {
+
         }
 
         @Override
-        public void TriggerState(EventInfo eventInfo)
-        {
-            currentState.TriggerState(eventInfo);
+        protected void EnterState() {
+            super.EnterState();
         }
 
-        public void ChangeState(State nextState)
-        {
-            currentState = nextState;
-            nextState.EnterState();
+        @Override
+        protected void ExitState() {
+            super.ExitState();
         }
 
-        /**
-         * Searching State
-         */
-        private State searchingState = new SearchingState();
 
-        private class SearchingState extends State<EventInfo>
+        private InactiveState inactiveState = new InactiveState();
+        private class InactiveState extends State<EventInfo>
         {
             @Override
-            public void TriggerState(EventInfo eventInfo)
+            protected void EnterState() {
+                super.EnterState();
+            }
+
+            @Override
+            protected void ExitState() {
+                super.ExitState();
+            }
+
+            @Override
+            protected void EventHandler(EventInfo info) throws EventHandledException {
+                
+            }
+        }
+
+
+
+        private ActiveState activeState = new ActiveState();
+        private class ActiveState extends State<EventInfo>
+        {
+            @Override
+            protected void EnterState()
             {
-                if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
-                    if (eventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTING) {
-                        ActiveState.this.ChangeState(ActiveState.this.connectingState);
+                this.ChangeState(searchingState);
+            }
+
+            @Override
+            protected void EventHandler(EventInfo eventInfo)
+            {
+
+            }
+
+            /**
+             * Searching State
+             */
+            private State searchingState = new SearchingState();
+
+            private class SearchingState extends State<EventInfo>
+            {
+                @Override
+                protected void EnterState() {
+                    // Start process to look for paired device
+                    // Start timer to max search pair time
+                }
+
+                @Override
+                protected void ExitState() {
+                    // Delete timer
+                }
+
+                @Override
+                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                {
+                    // Move to unconnectedState using same conditions as pendingDisconnectState
+
+                    if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                        if (eventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTING) {
+                            ActiveState.this.ChangeState(ActiveState.this.connectingState);
+                        }
                     }
                 }
             }
-        }
 
-        /**
-         * Connecting State
-         */
-        private State connectingState = new ConnectingState();
-
-        private class ConnectingState extends State<EventInfo>
-        {
-            @Override
-            public void TriggerState(EventInfo eventInfo)
+            /**
+             * Connecting State
+             */
+            private State connectingState = new State<EventInfo>()
             {
-                if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
-                    switch (eventInfo.bluetoothState) {
-                        case BluetoothAdapter.STATE_CONNECTED:
-                            ActiveState.this.ChangeState(ActiveState.this.connectedState);
-                            break;
-                        case BluetoothAdapter.STATE_DISCONNECTED:
-                            ActiveState.this.ChangeState(ActiveState.this.connectedState);
-                            break;
+                @Override
+                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                {
+                    if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                        switch (eventInfo.bluetoothState) {
+                            case BluetoothAdapter.STATE_CONNECTED:
+                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                                break;
+                            case BluetoothAdapter.STATE_DISCONNECTED:
+                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                                break;
+                        }
+                    }
+
+                    EventHandled();
+                }
+            };
+
+            /**
+             * Connected State
+             */
+            private State connectedState = new State<EventInfo>()
+            {
+                @Override
+                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                {
+                    if (!eventInfo.screenOn) {
+                        ActiveState.this.ChangeState(ActiveState.this.pendingDisconnectState);
+                    }
+                    else if (eventInfo.lastIntentString.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                        switch (eventInfo.bluetoothState) {
+                            case BluetoothAdapter.STATE_CONNECTED:
+                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                                break;
+                            case BluetoothAdapter.STATE_DISCONNECTED:
+                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                                break;
+                        }
+                    }
+
+                    EventHandled();
+                }
+            };
+
+
+            /**
+             * Pending Disconnect State
+             */
+            private State pendingDisconnectState = new State<EventInfo>()
+            {
+                @Override
+                protected void EnterState() {
+                    // Create/Start timer
+                }
+
+                @Override
+                protected void ExitState() {
+                    super.ExitState();
+                    // Delete timer
+                }
+
+                @Override
+                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                {
+                    if (eventInfo.screenOn) {
+                        // Screen turns on
+                        ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                    }
+                    else if (true) {
+                        // If timer expires
+                        ActiveState.this.ChangeState(ActiveState.this.unconnectedState);
+                    }
+
+                    EventHandled();
+                }
+            };
+
+
+            /**
+             * Unconnected State
+             */
+            private State unconnectedState = new State<EventInfo>()
+            {
+                @Override
+                protected void EnterState() {
+                    // Create/Start timer
+                }
+
+                @Override
+                protected void ExitState() {
+                    super.ExitState();
+                    // Delete timer
+                }
+
+                @Override
+                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                {
+                    if (eventInfo.screenOn) {
+                        // If screen on or timer expires
+                        ActiveState.this.ChangeState(ActiveState.this.searchingState);
+
                     }
                 }
-            }
-        }
-
-        /**
-         * Connected State
-         */
-        private State connectedState = new ConnectedState();
-
-        private class ConnectedState extends State<EventInfo>
-        {
-            @Override
-            public void TriggerState(EventInfo eventInfo)
-            {
-                if (!eventInfo.screenOn) {
-                    ActiveState.this.ChangeState(ActiveState.this.unconnectedState);
-                }
-            }
-        }
-
-
-        /**
-         * Unconnected State
-         */
-        private State unconnectedState = new UnconnectedState();
-
-        private class UnconnectedState extends State<EventInfo>
-        {
-            @Override
-            public void TriggerState(EventInfo eventInfo)
-            {
-                if (eventInfo.screenOn) {
-                    ActiveState.this.ChangeState(ActiveState.this.searchingState);
-                }
-            }
+            };
         }
     }
+
+
 }
