@@ -8,6 +8,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.wifi.WifiManager;
 import android.os.IBinder;
+import android.util.Log;
+
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  * Created with IntelliJ IDEA.
@@ -20,6 +24,10 @@ public class BtAutomationService extends Service
 {
     final String WIFI_EVENT_INTENT = WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION;
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
+
+    final long PENDING_OFF_DELAY = 5;
+    final long PENDING_ON_DELAY = 5;
+    final long SEARCHING_TIMEOUT_DELAY = 5;
 
     public class EventInfo
     {
@@ -65,6 +73,9 @@ public class BtAutomationService extends Service
                 new IntentFilter(BT_EVENT_INTENT));
         registerReceiver(wifiActionReceiver,
                 new IntentFilter(WIFI_EVENT_INTENT));
+        registerReceiver(timerEventReceiver,
+                new IntentFilter(BtAutomationStateMachine.TIMEOUT_EVENT));
+
 
     }
 
@@ -120,6 +131,19 @@ public class BtAutomationService extends Service
         }
     };
 
+    private BroadcastReceiver timerEventReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            if (intent.getAction().equals(BtAutomationStateMachine.TIMEOUT_EVENT)) {
+                mEventInfo.lastIntentString = intent.getAction();
+                // Signal state machine
+                stateMachine.HandleEvent(mEventInfo);
+            }
+        }
+    };
+
     @Override
     public IBinder onBind(Intent intent)
     {
@@ -134,6 +158,46 @@ public class BtAutomationService extends Service
     private BtAutomationStateMachine stateMachine = new BtAutomationStateMachine();
     private class BtAutomationStateMachine extends State<EventInfo>
     {
+        private static final String TAG = "BtAutomation StateMachine";
+
+        public static final String TIMEOUT_EVENT =
+                "com.ftechz.tools.BtAutomationService.BtAutomationStateMachine.TimeoutEvent";
+
+        private Timer mEventTimer;
+
+        public void StartTimer(long delay)
+        {
+            if (mEventTimer != null)
+            {
+                mEventTimer.cancel();
+                Log.d(TAG, "Timer stopped");
+            }
+
+            mEventTimer = new Timer(true);
+            mEventTimer.schedule(new TimeoutTask(), delay * 1000);
+
+            Log.d(TAG, "Timer started");
+        }
+
+        public void StopTimer()
+        {
+            if (mEventTimer != null) {
+                mEventTimer.cancel();
+                mEventTimer = null;
+                Log.d(TAG, "Timer stopped");
+            }
+
+        }
+
+        private class TimeoutTask extends TimerTask
+        {
+            @Override
+            public void run()
+            {
+                sendBroadcast(new Intent(TIMEOUT_EVENT));
+            }
+        }
+
         public void SyncState(EventInfo eventInfo)
         {
             if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_OFF)
@@ -255,6 +319,7 @@ public class BtAutomationService extends Service
                     super.EnterState();
                     // Start process to look for paired device
                     // Start timer to max search pair time
+                    StartTimer(SEARCHING_TIMEOUT_DELAY);
                 }
 
                 @Override
@@ -262,6 +327,7 @@ public class BtAutomationService extends Service
                 {
                     super.ExitState();
                     // Delete timer
+                    StopTimer();
                 }
 
                 @Override
@@ -275,17 +341,23 @@ public class BtAutomationService extends Service
                             ActiveState.this.ChangeState(ActiveState.this.connectingState);
                         }
                     }
+                    else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
+                        ActiveState.this.ChangeState(ActiveState.this.unconnectedState);
+                    }
                 }
             }
 
             /**
              * Connecting State
              */
-            private State connectingState = new State<EventInfo>()
+            private State connectingState = new ConnectingState();
+
+            private class ConnectingState extends State<EventInfo>
             {
                 @Override
                 protected void EventHandler(EventInfo eventInfo) throws EventHandledException
                 {
+                    // Doesn't work - need to check profile/device state
                     if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
                         switch (eventInfo.bluetoothState) {
                             case BluetoothAdapter.STATE_CONNECTED:
@@ -305,7 +377,9 @@ public class BtAutomationService extends Service
             /**
              * Connected State
              */
-            private State connectedState = new State<EventInfo>()
+            private State connectedState =  new ConnectedState();
+
+            private class ConnectedState extends State<EventInfo>
             {
                 @Override
                 protected void EventHandler(EventInfo eventInfo) throws EventHandledException
@@ -332,13 +406,16 @@ public class BtAutomationService extends Service
             /**
              * Pending Disconnect State
              */
-            private State pendingDisconnectState = new State<EventInfo>()
+            private State pendingDisconnectState =  new pendingDisconnectState();
+
+            private class pendingDisconnectState extends State<EventInfo>
             {
                 @Override
                 protected void EnterState()
                 {
                     super.EnterState();
                     // Create/Start timer
+                    StartTimer(PENDING_OFF_DELAY);
                 }
 
                 @Override
@@ -346,6 +423,7 @@ public class BtAutomationService extends Service
                 {
                     super.ExitState();
                     // Delete timer
+                    StopTimer();
                 }
 
                 @Override
@@ -355,7 +433,7 @@ public class BtAutomationService extends Service
                         // Screen turns on
                         ActiveState.this.ChangeState(ActiveState.this.connectedState);
                     }
-                    else if (true) {
+                    else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
                         // If timer expires
                         ActiveState.this.ChangeState(ActiveState.this.unconnectedState);
                     }
@@ -368,13 +446,16 @@ public class BtAutomationService extends Service
             /**
              * Unconnected State
              */
-            private State unconnectedState = new State<EventInfo>()
+            private State unconnectedState =  new UnconnectedState();
+
+            private class UnconnectedState extends State<EventInfo>
             {
                 @Override
                 protected void EnterState()
                 {
                     super.EnterState();
                     // Create/Start timer
+                    StartTimer(PENDING_ON_DELAY);
                 }
 
                 @Override
@@ -382,15 +463,15 @@ public class BtAutomationService extends Service
                 {
                     super.ExitState();
                     // Delete timer
+                    StopTimer();
                 }
 
                 @Override
                 protected void EventHandler(EventInfo eventInfo) throws EventHandledException
                 {
-                    if (eventInfo.screenOn) {
+                    if (eventInfo.screenOn || eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
                         // If screen on or timer expires
                         ActiveState.this.ChangeState(ActiveState.this.searchingState);
-
                     }
                 }
             };
