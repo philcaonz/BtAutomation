@@ -55,7 +55,7 @@ public class BtAutomationService extends Service
         mEventInfo.bluetoothState = mBluetoothAdapter.getState();
         mEventInfo.wifiConnected = mWifiManager.pingSupplicant();
 
-        stateMachine.ChangeState(stateMachine.inactiveState);
+        stateMachine.SyncState(mEventInfo);
 
         registerReceiver(displayActionReceiver,
                 new IntentFilter(Intent.ACTION_SCREEN_ON));
@@ -172,14 +172,17 @@ public class BtAutomationService extends Service
         }
 
         @Override
-        protected void EnterState() {
-            this.ChangeState(inactiveState);
+        protected void EnterState()
+        {
             super.EnterState();
+            this.ChangeState(inactiveState);
         }
 
         @Override
-        protected void ExitState() {
+        protected void ExitState()
+        {
             super.ExitState();
+            this.ChangeState(null);
         }
 
 
@@ -220,6 +223,7 @@ public class BtAutomationService extends Service
             @Override
             protected void EnterState()
             {
+                super.EnterState();
                 this.ChangeState(searchingState);
             }
 
@@ -246,13 +250,17 @@ public class BtAutomationService extends Service
             private class SearchingState extends State<EventInfo>
             {
                 @Override
-                protected void EnterState() {
+                protected void EnterState()
+                {
+                    super.EnterState();
                     // Start process to look for paired device
                     // Start timer to max search pair time
                 }
 
                 @Override
-                protected void ExitState() {
+                protected void ExitState()
+                {
+                    super.ExitState();
                     // Delete timer
                 }
 
@@ -327,12 +335,15 @@ public class BtAutomationService extends Service
             private State pendingDisconnectState = new State<EventInfo>()
             {
                 @Override
-                protected void EnterState() {
+                protected void EnterState()
+                {
+                    super.EnterState();
                     // Create/Start timer
                 }
 
                 @Override
-                protected void ExitState() {
+                protected void ExitState()
+                {
                     super.ExitState();
                     // Delete timer
                 }
@@ -360,12 +371,15 @@ public class BtAutomationService extends Service
             private State unconnectedState = new State<EventInfo>()
             {
                 @Override
-                protected void EnterState() {
+                protected void EnterState()
+                {
+                    super.EnterState();
                     // Create/Start timer
                 }
 
                 @Override
-                protected void ExitState() {
+                protected void ExitState()
+                {
                     super.ExitState();
                     // Delete timer
                 }

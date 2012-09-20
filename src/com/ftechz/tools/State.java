@@ -7,6 +7,8 @@ import android.util.Log;
  */
 public abstract class State<infoObject>
 {
+    private static final String TAG = "BtAutomation State";
+
     protected State<infoObject> mCurrentState;
 
     /**
@@ -25,6 +27,20 @@ public abstract class State<infoObject>
      */
     public void ChangeState(State<infoObject> nextState)
     {
+
+        String prevStateStr = "None";
+        String nextStateStr = "None";
+
+        if (mCurrentState != null) {
+            prevStateStr = mCurrentState.getClass().getName();
+        }
+        if (nextState != null) {
+            nextStateStr = nextState.getClass().getName();
+        }
+
+        Log.d(TAG, "Change state from: " + prevStateStr +
+                " to: " + nextStateStr);
+
         if (mCurrentState != null) {
             mCurrentState.ExitState();
         }
@@ -72,7 +88,7 @@ public abstract class State<infoObject>
      */
     protected void EnterState()
     {
-        Log.d("Entered state: %s", this.getClass().getName());
+        Log.d(TAG, "Entered state: " + this.getClass().getName());
     }
 
     /**
@@ -84,7 +100,7 @@ public abstract class State<infoObject>
             mCurrentState.ExitState();
         }
 
-        Log.d("Exited state: %s", this.getClass().getName());
+        Log.d(TAG, "Exited state: " + this.getClass().getName());
     }
 
     /**
