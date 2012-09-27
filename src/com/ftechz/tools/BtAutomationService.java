@@ -1,7 +1,7 @@
 package com.ftechz.tools;
 
 import android.app.Service;
-import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.*;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,8 +10,7 @@ import android.net.wifi.WifiManager;
 import android.os.IBinder;
 import android.util.Log;
 
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 
 /**
  * Created with IntelliJ IDEA.
@@ -22,12 +21,16 @@ import java.util.TimerTask;
  */
 public class BtAutomationService extends Service
 {
+    final String ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED";
+    final String ACTION_CONNECTION_STATE = BluetoothProfile.EXTRA_STATE;
     final String WIFI_EVENT_INTENT = WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION;
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
 
-    final long PENDING_OFF_DELAY = 5;
-    final long PENDING_ON_DELAY = 5;
-    final long SEARCHING_TIMEOUT_DELAY = 5;
+    UUID btNapUuid = UUID.fromString("00001116-0000-1000-8000-00805f9b34fb");
+
+    final long PENDING_OFF_DELAY = 60*4;
+    final long PENDING_ON_DELAY = 60*2;
+    final long SEARCHING_TIMEOUT_DELAY = 30;
 
     public class EventInfo
     {
@@ -46,6 +49,14 @@ public class BtAutomationService extends Service
     public void onCreate()
     {
         super.onCreate();
+        try
+        {
+            Class.forName("android.bluetooth.BluetoothPan");
+        }
+        catch(ClassNotFoundException classnotfoundexception)
+        {
+
+        }
 
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -76,6 +87,13 @@ public class BtAutomationService extends Service
         registerReceiver(timerEventReceiver,
                 new IntentFilter(BtAutomationStateMachine.TIMEOUT_EVENT));
 
+        registerReceiver(btDeviceActionReceiver,
+                new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED));
+        registerReceiver(btDeviceActionReceiver,
+                new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED));
+
+        registerReceiver(btDeviceActionReceiver,
+                new IntentFilter(ACTION_CONNECTION_STATE_CHANGED));
 
     }
 
@@ -128,6 +146,34 @@ public class BtAutomationService extends Service
                 // Signal state machine
                 stateMachine.HandleEvent(mEventInfo);
             }
+        }
+    };
+
+    private BroadcastReceiver btDeviceActionReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            if (intent.getAction().equals(ACTION_CONNECTION_STATE_CHANGED)) {
+                mEventInfo.bluetoothState = intent.getIntExtra(
+                        ACTION_CONNECTION_STATE, BluetoothAdapter.STATE_DISCONNECTED);
+                mEventInfo.lastIntentString = intent.getAction();
+                // Signal state machine
+                stateMachine.HandleEvent(mEventInfo);
+
+                Log.d("BtAutomation", "EVENTTTTTTTTT");
+            }
+
+//            if (intent.getAction().equals(BluetoothDevice.ACTION_ACL_CONNECTED)) {
+//                mEventInfo.lastIntentString = intent.getAction();
+//                // Signal state machine
+//                stateMachine.HandleEvent(mEventInfo);
+//            }
+//            else if (intent.getAction().equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
+//                mEventInfo.lastIntentString = intent.getAction();
+//                // Signal state machine
+//                stateMachine.HandleEvent(mEventInfo);
+//            }
         }
     };
 
@@ -311,12 +357,51 @@ public class BtAutomationService extends Service
              */
             private State searchingState = new SearchingState();
 
+            BluetoothDevice connectingDevice;
+
             private class SearchingState extends State<EventInfo>
             {
                 @Override
                 protected void EnterState()
                 {
                     super.EnterState();
+
+                    Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
+                    for (BluetoothDevice device : devices) {
+                        Log.d(TAG, "Pair device: " + device.getName() + " " + device.getAddress());
+                        if (device.getName().equals("HTC Vision")) {
+
+                            connectingDevice = device;
+
+                            mBluetoothAdapter.getProfileProxy(BtAutomationService.this,
+                                    new android.bluetooth.BluetoothProfile.ServiceListener() {
+
+                                        public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
+                                        {
+                                            BluetoothProfile bluetoothpan = (BluetoothProfile)bluetoothprofile;
+                                            try {
+                                                Log.d("BtAutomationService", "Class: " + bluetoothpan.getClass().getName());
+                                            bluetoothpan.getClass().getMethod(
+                                                    "connect", new java.lang.Class[] { BluetoothDevice.class }).invoke(
+                                                    bluetoothpan, new Object[] { connectingDevice });
+                                            }
+                                            catch (Exception ex) {
+                                                Log.d("BtAutomationService", ex.getMessage());
+                                            }
+
+                                        }
+
+                                        public void onServiceDisconnected(int i)
+                                        {
+
+                                        }
+                                    }
+                                    , 5);
+
+
+                        }
+                    }
+
                     // Start process to look for paired device
                     // Start timer to max search pair time
                     StartTimer(SEARCHING_TIMEOUT_DELAY);
@@ -336,9 +421,16 @@ public class BtAutomationService extends Service
                     // Move to unconnectedState using same conditions as pendingDisconnectState
 
                     // Transition to Connecting state
-                    if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
-                        if (eventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTING) {
-                            ActiveState.this.ChangeState(ActiveState.this.connectingState);
+                    if (eventInfo.lastIntentString.equals(ACTION_CONNECTION_STATE_CHANGED)) {
+//                        ActiveState.this.ChangeState(ActiveState.this.connectingState);
+                        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTED) {
+
+                            if (mEventInfo.screenOn) {
+                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
+                            }
+                            else {
+                                ActiveState.this.ChangeState(ActiveState.this.pendingDisconnectState);
+                            }
                         }
                     }
                     else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
@@ -387,14 +479,11 @@ public class BtAutomationService extends Service
                     if (!eventInfo.screenOn) {
                         ActiveState.this.ChangeState(ActiveState.this.pendingDisconnectState);
                     }
-                    else if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
-                        switch (eventInfo.bluetoothState) {
-                            case BluetoothAdapter.STATE_CONNECTED:
-                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
-                                break;
-                            case BluetoothAdapter.STATE_DISCONNECTED:
-                                ActiveState.this.ChangeState(ActiveState.this.connectedState);
-                                break;
+                    else if  (eventInfo.lastIntentString.equals(ACTION_CONNECTION_STATE_CHANGED)) {
+                        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_DISCONNECTED) {
+//                    else if (eventInfo.lastIntentString.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
+//                        ActiveState.this.ChangeState(ActiveState.this.connectingState);
+                            ActiveState.this.ChangeState(ActiveState.this.searchingState);
                         }
                     }
 
@@ -454,6 +543,43 @@ public class BtAutomationService extends Service
                 protected void EnterState()
                 {
                     super.EnterState();
+
+
+                    Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
+                    for (BluetoothDevice device : devices) {
+                        Log.d(TAG, "Pair device: " + device.getName() + " " + device.getAddress());
+                        if (device.getName().equals("HTC Vision")) {
+
+                            connectingDevice = device;
+
+                            mBluetoothAdapter.getProfileProxy(BtAutomationService.this,
+                                    new android.bluetooth.BluetoothProfile.ServiceListener() {
+
+                                        public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
+                                        {
+                                            BluetoothProfile bluetoothpan = (BluetoothProfile)bluetoothprofile;
+                                            try {
+                                                Log.d("BtAutomationService", "Class: " + bluetoothpan.getClass().getName());
+                                                bluetoothpan.getClass().getMethod(
+                                                        "disconnect", new java.lang.Class[] { BluetoothDevice.class }).invoke(
+                                                        bluetoothpan, new Object[] { connectingDevice });
+                                            }
+                                            catch (Exception ex) {
+                                                Log.d("BtAutomationService", ex.getMessage());
+                                            }
+
+                                        }
+
+                                        public void onServiceDisconnected(int i)
+                                        {
+                                        }
+                                    }
+                                    , 5);
+
+
+                        }
+                    }
+
                     // Create/Start timer
                     StartTimer(PENDING_ON_DELAY);
                 }
