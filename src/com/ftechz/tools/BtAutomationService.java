@@ -26,8 +26,6 @@ public class BtAutomationService extends Service
     final String WIFI_EVENT_INTENT = WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION;
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
 
-    UUID btNapUuid = UUID.fromString("00001116-0000-1000-8000-00805f9b34fb");
-
     final long PENDING_OFF_DELAY = 60*4;
     final long PENDING_ON_DELAY = 60*2;
     final long SEARCHING_TIMEOUT_DELAY = 30;
@@ -43,7 +41,6 @@ public class BtAutomationService extends Service
     public EventInfo mEventInfo = new EventInfo();
 
     private BluetoothAdapter mBluetoothAdapter;
-    private WifiManager mWifiManager;
 
     @Override
     public void onCreate()
@@ -68,7 +65,7 @@ public class BtAutomationService extends Service
 
         }
 
-        mWifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+        WifiManager mWifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 
         // Get the initial event statuses
         mEventInfo.bluetoothState = mBluetoothAdapter.getState();
@@ -163,17 +160,6 @@ public class BtAutomationService extends Service
 
                 Log.d("BtAutomation", "EVENTTTTTTTTT");
             }
-
-//            if (intent.getAction().equals(BluetoothDevice.ACTION_ACL_CONNECTED)) {
-//                mEventInfo.lastIntentString = intent.getAction();
-//                // Signal state machine
-//                stateMachine.HandleEvent(mEventInfo);
-//            }
-//            else if (intent.getAction().equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
-//                mEventInfo.lastIntentString = intent.getAction();
-//                // Signal state machine
-//                stateMachine.HandleEvent(mEventInfo);
-//            }
         }
     };
 
@@ -355,7 +341,7 @@ public class BtAutomationService extends Service
             /**
              * Searching State
              */
-            private State searchingState = new SearchingState();
+            private State<EventInfo> searchingState = new SearchingState();
 
             BluetoothDevice connectingDevice;
 
@@ -378,12 +364,11 @@ public class BtAutomationService extends Service
 
                                         public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
                                         {
-                                            BluetoothProfile bluetoothpan = (BluetoothProfile)bluetoothprofile;
                                             try {
-                                                Log.d("BtAutomationService", "Class: " + bluetoothpan.getClass().getName());
-                                            bluetoothpan.getClass().getMethod(
+                                                Log.d("BtAutomationService", "Class: " + bluetoothprofile.getClass().getName());
+                                                bluetoothprofile.getClass().getMethod(
                                                     "connect", new java.lang.Class[] { BluetoothDevice.class }).invoke(
-                                                    bluetoothpan, new Object[] { connectingDevice });
+                                                        bluetoothprofile, connectingDevice);
                                             }
                                             catch (Exception ex) {
                                                 Log.d("BtAutomationService", ex.getMessage());
@@ -442,7 +427,7 @@ public class BtAutomationService extends Service
             /**
              * Connecting State
              */
-            private State connectingState = new ConnectingState();
+            private State<EventInfo> connectingState = new ConnectingState();
 
             private class ConnectingState extends State<EventInfo>
             {
@@ -464,12 +449,12 @@ public class BtAutomationService extends Service
 
                     EventHandled();
                 }
-            };
+            }
 
             /**
              * Connected State
              */
-            private State connectedState =  new ConnectedState();
+            private State<EventInfo> connectedState =  new ConnectedState();
 
             private class ConnectedState extends State<EventInfo>
             {
@@ -489,13 +474,13 @@ public class BtAutomationService extends Service
 
                     EventHandled();
                 }
-            };
+            }
 
 
             /**
              * Pending Disconnect State
              */
-            private State pendingDisconnectState =  new pendingDisconnectState();
+            private State<EventInfo> pendingDisconnectState =  new pendingDisconnectState();
 
             private class pendingDisconnectState extends State<EventInfo>
             {
@@ -529,13 +514,13 @@ public class BtAutomationService extends Service
 
                     EventHandled();
                 }
-            };
+            }
 
 
             /**
              * Unconnected State
              */
-            private State unconnectedState =  new UnconnectedState();
+            private State<EventInfo> unconnectedState =  new UnconnectedState();
 
             private class UnconnectedState extends State<EventInfo>
             {
@@ -557,12 +542,11 @@ public class BtAutomationService extends Service
 
                                         public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
                                         {
-                                            BluetoothProfile bluetoothpan = (BluetoothProfile)bluetoothprofile;
                                             try {
-                                                Log.d("BtAutomationService", "Class: " + bluetoothpan.getClass().getName());
-                                                bluetoothpan.getClass().getMethod(
+                                                Log.d("BtAutomationService", "Class: " + bluetoothprofile.getClass().getName());
+                                                bluetoothprofile.getClass().getMethod(
                                                         "disconnect", new java.lang.Class[] { BluetoothDevice.class }).invoke(
-                                                        bluetoothpan, new Object[] { connectingDevice });
+                                                        bluetoothprofile, connectingDevice);
                                             }
                                             catch (Exception ex) {
                                                 Log.d("BtAutomationService", ex.getMessage());
@@ -600,7 +584,7 @@ public class BtAutomationService extends Service
                         ActiveState.this.ChangeState(ActiveState.this.searchingState);
                     }
                 }
-            };
+            }
         }
     }
 
