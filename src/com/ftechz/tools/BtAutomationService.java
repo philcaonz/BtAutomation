@@ -6,6 +6,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiManager;
 import android.os.IBinder;
 import android.util.Log;
@@ -23,12 +26,15 @@ public class BtAutomationService extends Service
 {
     final String ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED";
     final String ACTION_CONNECTION_STATE = BluetoothProfile.EXTRA_STATE;
-    final String WIFI_EVENT_INTENT = WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION;
+    final String WIFI_EVENT_INTENT = WifiManager.NETWORK_STATE_CHANGED_ACTION;
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
+    final int BT_PAN_PROFILE = 5;
 
     final long PENDING_OFF_DELAY = 60*4;
     final long PENDING_ON_DELAY = 60*2;
     final long SEARCHING_TIMEOUT_DELAY = 30;
+
+    ConnectivityManager mConnectivityManager;
 
     public class EventInfo
     {
@@ -61,15 +67,17 @@ public class BtAutomationService extends Service
             return;
         }
 
-        if (mBluetoothAdapter.isEnabled()) {
-
-        }
-
-        WifiManager mWifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+        mConnectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        NetworkInfo mWifiNetworkInfo = mConnectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
 
         // Get the initial event statuses
         mEventInfo.bluetoothState = mBluetoothAdapter.getState();
-        mEventInfo.wifiConnected = mWifiManager.pingSupplicant();
+        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_ON) {
+            mEventInfo.bluetoothState = mBluetoothAdapter.getProfileConnectionState(BT_PAN_PROFILE);
+        }
+
+
+        mEventInfo.wifiConnected = mWifiNetworkInfo.isConnected();
 
         stateMachine.SyncState(mEventInfo);
 
@@ -119,8 +127,8 @@ public class BtAutomationService extends Service
         public void onReceive(Context context, Intent intent)
         {
             if (intent.getAction().equals(WIFI_EVENT_INTENT)) {
-                mEventInfo.wifiConnected = intent.getBooleanExtra(
-                        WifiManager.EXTRA_SUPPLICANT_CONNECTED, false);
+                NetworkInfo networkInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
+                mEventInfo.wifiConnected = networkInfo.isConnected();
 
                 mEventInfo.lastIntentString = intent.getAction();
 
@@ -157,8 +165,6 @@ public class BtAutomationService extends Service
                 mEventInfo.lastIntentString = intent.getAction();
                 // Signal state machine
                 stateMachine.HandleEvent(mEventInfo);
-
-                Log.d("BtAutomation", "EVENTTTTTTTTT");
             }
         }
     };
@@ -302,8 +308,8 @@ public class BtAutomationService extends Service
             {
                 // Transition to active state
                 if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)
-                        | eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
-                    if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_ON)
+                        || eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
+                    if ((eventInfo.bluetoothState != BluetoothAdapter.STATE_OFF)
                             && !eventInfo.wifiConnected) {
                         BtAutomationStateMachine.this.ChangeState(
                                 BtAutomationStateMachine.this.activeState);
@@ -374,6 +380,7 @@ public class BtAutomationService extends Service
                                                 Log.d("BtAutomationService", ex.getMessage());
                                             }
 
+                                            mBluetoothAdapter.closeProfileProxy(BT_PAN_PROFILE, bluetoothprofile);
                                         }
 
                                         public void onServiceDisconnected(int i)
@@ -381,7 +388,7 @@ public class BtAutomationService extends Service
 
                                         }
                                     }
-                                    , 5);
+                                    , BT_PAN_PROFILE);
 
 
                         }
@@ -558,7 +565,7 @@ public class BtAutomationService extends Service
                                         {
                                         }
                                     }
-                                    , 5);
+                                    , BT_PAN_PROFILE);
 
 
                         }
