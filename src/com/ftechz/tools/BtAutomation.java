@@ -2,31 +2,39 @@ package com.ftechz.tools;
 
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
+import android.widget.TextView;
 
-public class BtAutomation extends Activity {
+public class BtAutomation extends Activity
+{
+    private TextView mStateText;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
+        mStateText = (TextView) findViewById(R.id.stateText);
+
         Intent intent = new Intent(this, BtAutomationService.class);
         startService(intent);
+
+        registerReceiver(stateEnterEventReceiver,
+                new IntentFilter(State.ENTER_STATE_EVENT));
     }
 
-
-    public void SomeFunction() {
-        BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (mBluetoothAdapter == null) {
-            return;
+    private BroadcastReceiver stateEnterEventReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            mStateText.setText(intent.getStringExtra(State.ENTER_STATE_EVENT_EXTRA));
         }
-
-        if (mBluetoothAdapter.isEnabled()) {
-
-        }
-    }
-
+    };
 
     @Override
     protected void onDestroy() {

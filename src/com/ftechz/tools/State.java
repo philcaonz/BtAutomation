@@ -1,12 +1,18 @@
 package com.ftechz.tools;
 
+import android.content.Context;
+import android.content.Intent;
 import android.util.Log;
 
 /**
- *
+ * A class representing a state
  */
 public abstract class State<infoObject>
 {
+    public static final String ENTER_STATE_EVENT =
+            "com.ftechz.tools.State.EnterStateEvent";
+    public static final String ENTER_STATE_EVENT_EXTRA = "StateName";
+
     private static final String TAG = "BtAutomation State";
 
     protected State<infoObject> mCurrentState;
@@ -25,17 +31,17 @@ public abstract class State<infoObject>
      * Change the state within this level
      * @param nextState
      */
-    public void ChangeState(State<infoObject> nextState)
+    public void ChangeState(Context context, State<infoObject> nextState)
     {
 
         String prevStateStr = "None";
         String nextStateStr = "None";
 
         if (mCurrentState != null) {
-            prevStateStr = mCurrentState.getClass().getName();
+            prevStateStr = mCurrentState.getClass().getSimpleName();
         }
         if (nextState != null) {
-            nextStateStr = nextState.getClass().getName();
+            nextStateStr = nextState.getClass().getSimpleName();
         }
 
         Log.d(TAG, "Change state from: " + prevStateStr +
@@ -48,7 +54,7 @@ public abstract class State<infoObject>
         mCurrentState = nextState;
 
         if (mCurrentState != null) {
-            mCurrentState.EnterState();
+            mCurrentState.EnterState(context);
         }
     }
 
@@ -86,9 +92,12 @@ public abstract class State<infoObject>
     /**
      * The method called when state is first entered
      */
-    protected void EnterState()
+    protected void EnterState(Context context)
     {
-        Log.d(TAG, "Entered state: " + this.getClass().getName());
+        Log.d(TAG, "Entered state: " + this.getClass().getSimpleName());
+        Intent intent = new Intent(ENTER_STATE_EVENT);
+        intent.putExtra(ENTER_STATE_EVENT_EXTRA, this.getClass().getSimpleName());
+        context.sendBroadcast(intent);
     }
 
     /**
@@ -100,7 +109,7 @@ public abstract class State<infoObject>
             mCurrentState.ExitState();
         }
 
-        Log.d(TAG, "Exited state: " + this.getClass().getName());
+        Log.d(TAG, "Exited state: " + this.getClass().getSimpleName());
     }
 
     /**
