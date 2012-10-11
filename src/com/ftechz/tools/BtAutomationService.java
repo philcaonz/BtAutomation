@@ -1,5 +1,8 @@
 package com.ftechz.tools;
 
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -30,10 +33,15 @@ public class BtAutomationService extends Service
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
     final int BT_PAN_PROFILE = 5;
 
+    final int RUNNING_NOTIFICATION_ID = 1;
+
     BtAutomationStateMachine mBtAutomationStateMachine;
     public EventInfo mEventInfo = new EventInfo();
 
     private BluetoothAdapter mBluetoothAdapter;
+
+    Notification.Builder mNotificationBuilder;
+    NotificationManager mNotificationManager;
 
     @Override
     public void onCreate()
@@ -55,6 +63,9 @@ public class BtAutomationService extends Service
 
         registerEventHandlers();
 
+        mNotificationManager = (NotificationManager) getSystemService(
+                Context.NOTIFICATION_SERVICE);
+        showNotification();
     }
 
     /**
@@ -80,6 +91,9 @@ public class BtAutomationService extends Service
 
     private void registerEventHandlers()
     {
+        registerReceiver(stateEnterEventReceiver,
+                new IntentFilter(State.ENTER_STATE_EVENT));
+
         registerReceiver(displayActionReceiver,
                 new IntentFilter(Intent.ACTION_SCREEN_ON));
         registerReceiver(displayActionReceiver,
@@ -188,4 +202,57 @@ public class BtAutomationService extends Service
     {
         return null;
     }
+
+    @Override
+    public void onDestroy()
+    {
+        super.onDestroy();
+
+        hideNotification();
+    }
+
+    public void showNotification()
+    {
+        mNotificationBuilder = new Notification.Builder(this);
+        mNotificationBuilder.setOngoing(true);
+        mNotificationBuilder.setSmallIcon(R.drawable.play);
+        mNotificationBuilder.setWhen(0);
+
+        Intent notificationIntent = new Intent(this, BtAutomation.class);
+        PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+
+        mNotificationBuilder.addAction(R.drawable.play, "Open", contentIntent);
+        mNotificationBuilder.setContentIntent(contentIntent);
+        mNotificationBuilder.setPriority(Notification.PRIORITY_HIGH);
+
+        updateNotification("");
+        this.startForeground(RUNNING_NOTIFICATION_ID, mNotificationBuilder.build());
+    }
+
+    public void updateNotification(String text)
+    {
+        if (mNotificationBuilder == null) {
+            return;
+        }
+
+        mNotificationBuilder.setContentTitle("Bt Automation active");
+        mNotificationBuilder.setContentText(text);
+
+        mNotificationManager.notify(RUNNING_NOTIFICATION_ID, mNotificationBuilder.build());
+    }
+
+    public void hideNotification()
+    {
+        this.stopForeground(true);
+    }
+
+
+    private BroadcastReceiver stateEnterEventReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            updateNotification(intent.getStringExtra(State.ENTER_STATE_EVENT_EXTRA));
+        }
+    };
 }
