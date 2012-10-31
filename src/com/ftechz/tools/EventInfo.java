@@ -13,4 +13,5 @@ public class EventInfo
     int bluetoothState;
     boolean wifiConnected;
     boolean screenOn;
+    boolean enabled;
 }

@@ -73,7 +73,7 @@ public class BtAutomationService extends Service
      */
     private void initialiseStateMachine()
     {
-        mBtAutomationStateMachine = new BtAutomationStateMachine(this, mEventInfo);
+        mEventInfo.enabled = true; // Always true for now
 
         // Get bluetooth state
         mEventInfo.bluetoothState = mBluetoothAdapter.getState();
@@ -86,6 +86,7 @@ public class BtAutomationService extends Service
         NetworkInfo wifiNetworkInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
         mEventInfo.wifiConnected = wifiNetworkInfo.isConnected();
 
+        mBtAutomationStateMachine = new BtAutomationStateMachine(this, mEventInfo);
         mBtAutomationStateMachine.SyncState(mEventInfo);
     }
 

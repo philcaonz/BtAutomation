@@ -66,9 +66,6 @@ public class BtAutomationStateMachine
                                 topLevelState.activeState.connectedState);
                         break;
                     case BluetoothAdapter.STATE_CONNECTING:
-                        topLevelState.activeState.ChangeState(mContext,
-                                topLevelState.activeState.connectingState);
-                        break;
                     case BluetoothAdapter.STATE_TURNING_OFF:
                     case BluetoothAdapter.STATE_DISCONNECTED:
                     case BluetoothAdapter.STATE_DISCONNECTING:
@@ -89,6 +86,9 @@ public class BtAutomationStateMachine
 
     private TopLevelState topLevelState = new TopLevelState();
 
+    /*****************
+     * Top level state
+     *****************/
     private class TopLevelState extends State<EventInfo>
     {
         private static final String TAG = "BtAutomationStateMachine.TopLevelState";
@@ -148,9 +148,9 @@ public class BtAutomationStateMachine
         }
 
 
-        /**
+        /*****************
          * Inactive State
-         */
+         *****************/
         public InactiveState inactiveState = new InactiveState();
 
         public class InactiveState extends State<EventInfo>
@@ -171,10 +171,9 @@ public class BtAutomationStateMachine
             protected void EventHandler(EventInfo eventInfo) throws EventHandledException
             {
                 // Transition to active state
-                if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)
-                        || eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
-                    if ((eventInfo.bluetoothState != BluetoothAdapter.STATE_OFF)
-                            && !eventInfo.wifiConnected) {
+                // TODO Add enable/disable intent
+                if (eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
+                    if ((eventInfo.enabled) && !eventInfo.wifiConnected) {
                         TopLevelState.this.ChangeState(mContext,
                                 TopLevelState.this.activeState);
                         this.EventHandled();
@@ -184,9 +183,9 @@ public class BtAutomationStateMachine
         }
 
 
-        /**
+        /***************
          * Active State
-         */
+         ***************/
         public ActiveState activeState = new ActiveState();
 
         public class ActiveState extends State<EventInfo>
@@ -195,17 +194,21 @@ public class BtAutomationStateMachine
             protected void EnterState(Context context)
             {
                 super.EnterState(context);
-                this.ChangeState(context, searchingState);
+                if (mBtManager.IsAdaptorEnabled()) {
+                    this.ChangeState(context, searchingState);
+                }
+                else {
+                    this.ChangeState(context, btEnablingState);
+                }
             }
 
             @Override
             protected void EventHandler(EventInfo eventInfo) throws EventHandledException
             {
                 // Transition to inactive state
-                if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)
-                        | eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
-                    if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_OFF)
-                            || eventInfo.wifiConnected) {
+                // TODO Add enable/disable intent
+                if (eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
+                    if ((!eventInfo.enabled) || eventInfo.wifiConnected) {
                         TopLevelState.this.ChangeState(
                                 mContext,
                                 TopLevelState.this.inactiveState);
@@ -214,9 +217,54 @@ public class BtAutomationStateMachine
                 }
             }
 
-            /**
+
+            /****************************
+             * Bluetooth Enabling State
+             ****************************/
+            private State<EventInfo> btEnablingState = new BtEnablingState();
+
+            private class BtEnablingState extends State<EventInfo>
+            {
+                @Override
+                protected void EnterState(Context context)
+                {
+                    super.EnterState(context);
+
+                    mBtManager.EnableAdaptor();
+
+                    // Start process to look for paired device
+                    // Start timer to max search pair time
+                    StartTimer(SEARCHING_TIMEOUT_DELAY);
+                }
+
+                @Override
+                protected void ExitState()
+                {
+                    super.ExitState();
+                    // Delete timer
+                    StopTimer();
+                }
+
+                @Override
+                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                {
+                    // Transition to Connecting state
+                    if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
+                        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_ON) {
+                            ActiveState.this.ChangeState(mContext,
+                                    ActiveState.this.searchingState);
+                        }
+                    } else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
+                        // Try again on timeout
+                        ActiveState.this.ChangeState(mContext,
+                                ActiveState.this.btEnablingState);
+                    }
+                }
+            }
+
+            /******************
              * Searching State
-             */
+             ******************/
             private State<EventInfo> searchingState = new SearchingState();
 
             private class SearchingState extends State<EventInfo>
@@ -248,7 +296,6 @@ public class BtAutomationStateMachine
 
                     // Transition to Connecting state
                     if (eventInfo.lastIntentString.equals(ACTION_CONNECTION_STATE_CHANGED)) {
-//                        ActiveState.this.ChangeState(ActiveState.this.connectingState);
                         if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTED) {
 
                             if (mEventInfo.screenOn) {
@@ -266,38 +313,9 @@ public class BtAutomationStateMachine
                 }
             }
 
-            /**
-             * Connecting State
-             */
-            private State<EventInfo> connectingState = new ConnectingState();
-
-            private class ConnectingState extends State<EventInfo>
-            {
-                @Override
-                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
-                {
-                    // Doesn't work - need to check profile/device state
-                    if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
-                        switch (eventInfo.bluetoothState) {
-                            case BluetoothAdapter.STATE_CONNECTED:
-                                // Transition to Connected state
-                                ActiveState.this.ChangeState(mContext,
-                                        ActiveState.this.connectedState);
-                                break;
-                            case BluetoothAdapter.STATE_DISCONNECTED:
-                                ActiveState.this.ChangeState(mContext,
-                                        ActiveState.this.searchingState);
-                                break;
-                        }
-                    }
-
-                    EventHandled();
-                }
-            }
-
-            /**
+            /******************
              * Connected State
-             */
+             ******************/
             private State<EventInfo> connectedState = new ConnectedState();
 
             private class ConnectedState extends State<EventInfo>
@@ -320,9 +338,9 @@ public class BtAutomationStateMachine
             }
 
 
-            /**
+            /***************************
              * Pending Disconnect State
-             */
+             ***************************/
             private State<EventInfo> pendingDisconnectState = new pendingDisconnectState();
 
             private class pendingDisconnectState extends State<EventInfo>
@@ -361,9 +379,9 @@ public class BtAutomationStateMachine
             }
 
 
-            /**
+            /********************
              * Unconnected State
-             */
+             ********************/
             private State<EventInfo> unconnectedState = new UnconnectedState();
 
             private class UnconnectedState extends State<EventInfo>
@@ -373,7 +391,7 @@ public class BtAutomationStateMachine
                 {
                     super.EnterState(context);
 
-                    mBtManager.DisconnectFromDevice(deviceName);
+                    mBtManager.DisableAdaptor();
 
                     // Create/Start timer
                     StartTimer(PENDING_ON_DELAY);
@@ -393,7 +411,7 @@ public class BtAutomationStateMachine
                     if (eventInfo.screenOn || eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
                         // If screen on or timer expires
                         ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.searchingState);
+                                ActiveState.this.btEnablingState);
                     }
                 }
             }

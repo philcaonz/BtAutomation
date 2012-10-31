@@ -31,6 +31,21 @@ public class BtManager {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     }
 
+    public boolean EnableAdaptor()
+    {
+        return mBluetoothAdapter.enable();
+    }
+
+    public boolean DisableAdaptor()
+    {
+        return mBluetoothAdapter.disable();
+    }
+
+    public boolean IsAdaptorEnabled()
+    {
+        return mBluetoothAdapter.isEnabled();
+    }
+
     public void ConnectToDevice(String deviceName)
     {
         BluetoothDevice device = findBtDevice(deviceName);
