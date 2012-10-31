@@ -31,8 +31,8 @@ public class BtAutomationStateMachine
     final String WIFI_EVENT_INTENT = WifiManager.NETWORK_STATE_CHANGED_ACTION;
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
 
-    final long PENDING_OFF_DELAY = 40;
-    final long PENDING_ON_DELAY = 20;
+    final long PENDING_OFF_DELAY = 60 * 4;
+    final long PENDING_ON_DELAY = 60 * 2;
     final long SEARCHING_TIMEOUT_DELAY = 30;
 
     private Context mContext;

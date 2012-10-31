@@ -14,11 +14,12 @@ import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
+import android.os.Binder;
 import android.os.IBinder;
 
 /**
  * Created with IntelliJ IDEA.
- * User: root
+ * User: Phil
  * Date: 12/09/12
  * Time: 3:52 PM
  * To change this template use File | Settings | File Templates.
@@ -34,6 +35,8 @@ public class BtAutomationService extends Service
     final int BT_PAN_PROFILE = 5;
 
     final int RUNNING_NOTIFICATION_ID = 1;
+
+    private final IBinder mBinder = new BtAutomationServiceBinder();
 
     BtAutomationStateMachine mBtAutomationStateMachine;
     public EventInfo mEventInfo = new EventInfo();
@@ -201,7 +204,7 @@ public class BtAutomationService extends Service
     @Override
     public IBinder onBind(Intent intent)
     {
-        return null;
+        return mBinder;
     }
 
     @Override
@@ -256,4 +259,9 @@ public class BtAutomationService extends Service
             updateNotification(intent.getStringExtra(State.ENTER_STATE_EVENT_EXTRA));
         }
     };
+
+    public class BtAutomationServiceBinder extends Binder
+    {
+
+    }
 }
