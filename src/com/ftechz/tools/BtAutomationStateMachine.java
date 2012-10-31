@@ -159,6 +159,7 @@ public class BtAutomationStateMachine
             protected void EnterState(Context context)
             {
                 super.EnterState(context);
+                mBtManager.DisableAdaptor();
             }
 
             @Override

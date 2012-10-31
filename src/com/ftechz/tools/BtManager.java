@@ -33,12 +33,22 @@ public class BtManager {
 
     public boolean EnableAdaptor()
     {
-        return mBluetoothAdapter.enable();
+        if (!mBluetoothAdapter.isEnabled()) {
+            return mBluetoothAdapter.enable();
+        }
+        else {
+            return false;
+        }
     }
 
     public boolean DisableAdaptor()
     {
-        return mBluetoothAdapter.disable();
+        if (mBluetoothAdapter.isEnabled()) {
+            return mBluetoothAdapter.disable();
+        }
+        else {
+            return false;
+        }
     }
 
     public boolean IsAdaptorEnabled()
