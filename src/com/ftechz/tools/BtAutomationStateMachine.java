@@ -30,29 +30,22 @@ public class BtAutomationStateMachine
     final String ACTION_CONNECTION_STATE = BluetoothProfile.EXTRA_STATE;
     final String WIFI_EVENT_INTENT = WifiManager.NETWORK_STATE_CHANGED_ACTION;
     final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
-    final int BT_PAN_PROFILE = 5;
 
-    final long PENDING_OFF_DELAY = 60 * 4;
-    final long PENDING_ON_DELAY = 60 * 2;
+    final long PENDING_OFF_DELAY = 40;
+    final long PENDING_ON_DELAY = 20;
     final long SEARCHING_TIMEOUT_DELAY = 30;
 
     private Context mContext;
-    private BluetoothAdapter mBluetoothAdapter;
     public EventInfo mEventInfo;
 
     String deviceName = "HTC Vision";
-    BluetoothDevice connectingDevice;
+    BtManager mBtManager;
 
     public BtAutomationStateMachine(Context context, EventInfo eventInfo)
     {
         mContext = context;
         mEventInfo = eventInfo;
-
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (mBluetoothAdapter == null) {
-            return;
-        }
-
+        mBtManager = new BtManager(context);
     }
 
     public void HandleEvent(EventInfo eventInfo)
@@ -233,12 +226,7 @@ public class BtAutomationStateMachine
                 {
                     super.EnterState(context);
 
-                    BluetoothDevice device = findBtDevice(deviceName);
-                    if (device != null) {
-                        connectingDevice = device;
-                        mBluetoothAdapter.getProfileProxy(mContext,
-                                btConnectServiceListener, BT_PAN_PROFILE);
-                    }
+                    mBtManager.ConnectToDevice(deviceName);
 
                     // Start process to look for paired device
                     // Start timer to max search pair time
@@ -322,8 +310,6 @@ public class BtAutomationStateMachine
                                 ActiveState.this.pendingDisconnectState);
                     } else if (eventInfo.lastIntentString.equals(ACTION_CONNECTION_STATE_CHANGED)) {
                         if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_DISCONNECTED) {
-//                    else if (eventInfo.lastIntentString.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
-//                        ActiveState.this.ChangeState(ActiveState.this.connectingState);
                             ActiveState.this.ChangeState(mContext,
                                     ActiveState.this.searchingState);
                         }
@@ -387,12 +373,7 @@ public class BtAutomationStateMachine
                 {
                     super.EnterState(context);
 
-                    BluetoothDevice device = findBtDevice(deviceName);
-                    if (device != null) {
-                        connectingDevice = device;
-                        mBluetoothAdapter.getProfileProxy(mContext,
-                                btdisconnectServiceListener, BT_PAN_PROFILE);
-                    }
+                    mBtManager.DisconnectFromDevice(deviceName);
 
                     // Create/Start timer
                     StartTimer(PENDING_ON_DELAY);
@@ -418,75 +399,4 @@ public class BtAutomationStateMachine
             }
         }
     }
-
-
-    BluetoothDevice findBtDevice(String deviceName)
-    {
-        Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
-        for (BluetoothDevice device : devices) {
-            Log.d(TAG, "Pair device: " + device.getName() + " " + device.getAddress());
-            if (device.getName().equals(deviceName)) {
-                return device;
-            }
-        }
-
-        return null;
-    }
-
-    BluetoothProfile.ServiceListener btConnectServiceListener = new BluetoothProfile.ServiceListener()
-    {
-        public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
-        {
-            try {
-                Log.d(TAG, "Class: " + bluetoothprofile.getClass().getName() + " connect");
-                Method connectMethod = bluetoothprofile.getClass().getMethod(
-                        "connect", new java.lang.Class[]{BluetoothDevice.class});
-
-                if ((Boolean) connectMethod.invoke(bluetoothprofile, connectingDevice)) {
-                    Log.d(TAG, "Connect successful");
-                } else {
-                    Log.d(TAG, "Connect failed");
-                }
-
-            } catch (Exception ex) {
-                Log.d(TAG, ex.getMessage());
-            }
-
-            mBluetoothAdapter.closeProfileProxy(BT_PAN_PROFILE, bluetoothprofile);
-        }
-
-        public void onServiceDisconnected(int i)
-        {
-
-        }
-    };
-
-
-    BluetoothProfile.ServiceListener btdisconnectServiceListener = new BluetoothProfile.ServiceListener()
-    {
-        public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
-        {
-            try {
-                Log.d(TAG, "Class: " + bluetoothprofile.getClass().getName() + " disconnect");
-                Method disconnectMethod = bluetoothprofile.getClass().getMethod(
-                        "disconnect", new java.lang.Class[]{BluetoothDevice.class});
-
-                if ((Boolean) disconnectMethod.invoke(bluetoothprofile, connectingDevice)) {
-                    Log.d(TAG, "disconnect successful");
-                } else {
-                    Log.d(TAG, "disconnect failed");
-                }
-
-            } catch (Exception ex) {
-                Log.d("BtAutomationService", ex.getMessage());
-            }
-
-            mBluetoothAdapter.closeProfileProxy(BT_PAN_PROFILE, bluetoothprofile);
-        }
-
-        public void onServiceDisconnected(int i)
-        {
-
-        }
-    };
 }
