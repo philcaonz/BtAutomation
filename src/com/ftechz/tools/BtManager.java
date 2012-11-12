@@ -3,146 +3,136 @@ package com.ftechz.tools;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.util.Log;
-
-import java.lang.reflect.Method;
-import java.util.Set;
 
 /**
  * Created with IntelliJ IDEA.
- * User: Phil
- * Date: 31/10/12
- * Time: 4:12 PM
+ * User: phillip
+ * Date: 12/11/12
+ * Time: 12:57 AM
  * To change this template use File | Settings | File Templates.
  */
 public class BtManager {
     private static final String TAG = "BtAutomation.BtManager";
 
-    final int BT_PAN_PROFILE = 5;
+    // Intent broadcast actions
+    final String PAN_ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED";
+    final String BT_ACTION_CONNECTION_STATE = BluetoothProfile.EXTRA_STATE;
+    final String BT_STATE_CHANGED = BluetoothAdapter.ACTION_STATE_CHANGED;
+
+    public static final String ACTION_CONNECTION_STATE_CHANGED = "com.ftechz.tools.BtManager.action.CONNECTION_STATE_CHANGED";
+    public static final String EXTRA_STATE = "com.ftechz.tools.BtManager.extra.STATE";
+    public static final int STATE_DISCONNECTED = 0;
+    public static final int STATE_CONNECTED = 1;
+
 
     private Context mContext;
-    private BluetoothAdapter mBluetoothAdapter;
-    private BluetoothDevice mDevice;
+    private boolean mDisableOnDisconnect = true;
+    private String mConnectDeviceName = "";
+    private boolean mConnectEnable = false;
+
+    private int mConnectionState = STATE_DISCONNECTED;
+
+    private BtHelper mBtHelper;
 
     public BtManager(Context context)
     {
         mContext = context;
-        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        mBtHelper = new BtHelper(context);
+        registerEventHandlers(context);
     }
 
-    public boolean EnableAdaptor()
+    public void Connect(String deviceName)
     {
-        if (!mBluetoothAdapter.isEnabled()) {
-            return mBluetoothAdapter.enable();
-        }
-        else {
-            return false;
-        }
-    }
+        mConnectDeviceName = deviceName;
+        mConnectEnable = true;
 
-    public boolean DisableAdaptor()
-    {
-        if (mBluetoothAdapter.isEnabled()) {
-            return mBluetoothAdapter.disable();
-        }
-        else {
-            return false;
-        }
-    }
-
-    public boolean IsAdaptorEnabled()
-    {
-        return mBluetoothAdapter.isEnabled();
-    }
-
-    public void ConnectToDevice(String deviceName)
-    {
-        BluetoothDevice device = findBtDevice(deviceName);
-        if (device != null) {
-            mDevice = device;
-            mBluetoothAdapter.getProfileProxy(mContext,
-                    btConnectServiceListener, BT_PAN_PROFILE);
-        }
-    }
-
-    public void DisconnectFromDevice(String deviceName)
-    {
-        BluetoothDevice device = findBtDevice(deviceName);
-        if (device != null) {
-            mDevice = device;
-            mBluetoothAdapter.getProfileProxy(mContext,
-                    btdisconnectServiceListener, BT_PAN_PROFILE);
-        }
-    }
-
-    private BluetoothDevice findBtDevice(String deviceName)
-    {
-        Set<BluetoothDevice> devices = mBluetoothAdapter.getBondedDevices();
-        for (BluetoothDevice device : devices) {
-            Log.d(TAG, "Pair device: " + device.getName() + " " + device.getAddress());
-            if (device.getName().equals(deviceName)) {
-                return device;
+        if (mDisableOnDisconnect) {
+            if (!mBtHelper.IsAdaptorEnabled()) {
+                mBtHelper.EnableAdaptor();
+            }
+            else {
+                mBtHelper.ConnectToDevice(deviceName);
             }
         }
+        else {
 
-        return null;
+        }
     }
 
-    BluetoothProfile.ServiceListener btConnectServiceListener = new BluetoothProfile.ServiceListener()
+    public void Disconnect(String deviceName)
     {
-        public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
-        {
-            try {
-                Log.d(TAG, "Class: " + bluetoothprofile.getClass().getName() + " connect");
-                Method connectMethod = bluetoothprofile.getClass().getMethod(
-                        "connect", new java.lang.Class[]{BluetoothDevice.class});
-
-                if ((Boolean) connectMethod.invoke(bluetoothprofile, mDevice)) {
-                    Log.d(TAG, "Connect successful");
-                } else {
-                    Log.d(TAG, "Connect failed");
-                }
-
-            } catch (Exception ex) {
-                Log.d(TAG, ex.getMessage());
-            }
-
-            mBluetoothAdapter.closeProfileProxy(BT_PAN_PROFILE, bluetoothprofile);
+        if (mDisableOnDisconnect) {
+            mBtHelper.DisableAdaptor();
         }
+        else {
+            if (mBtHelper.IsConnectedToDevice(deviceName)) {
+                mBtHelper.DisconnectFromDevice(deviceName);
+            }
+        }
+    }
 
-        public void onServiceDisconnected(int i)
+    public boolean IsConnected()
+    {
+        return mBtHelper.IsConnectedToDevice("");
+    }
+
+    private void registerEventHandlers(Context context)
+    {
+        context.registerReceiver(btAdaptorActionReceiver,
+                new IntentFilter(BT_STATE_CHANGED));
+
+        context.registerReceiver(btDeviceActionReceiver,
+                new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED));
+        context.registerReceiver(btDeviceActionReceiver,
+                new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED));
+        context.registerReceiver(btDeviceActionReceiver,
+                new IntentFilter(PAN_ACTION_CONNECTION_STATE_CHANGED));
+    }
+
+    private BroadcastReceiver btAdaptorActionReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
         {
+            int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE,
+                    BluetoothAdapter.STATE_OFF);
 
+            // Once bluetooth adaptor turns on, connect to device
+            if (state == BluetoothAdapter.STATE_ON) {
+                mBtHelper.ConnectToDevice(mConnectDeviceName);
+            }
         }
     };
 
-
-    BluetoothProfile.ServiceListener btdisconnectServiceListener = new BluetoothProfile.ServiceListener()
+    private BroadcastReceiver btDeviceActionReceiver = new BroadcastReceiver()
     {
-        public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
+        @Override
+        public void onReceive(Context context, Intent intent)
         {
-            try {
-                Log.d(TAG, "Class: " + bluetoothprofile.getClass().getName() + " disconnect");
-                Method disconnectMethod = bluetoothprofile.getClass().getMethod(
-                        "disconnect", new java.lang.Class[]{BluetoothDevice.class});
+            int state = intent.getIntExtra(BT_ACTION_CONNECTION_STATE,
+                    BluetoothAdapter.STATE_DISCONNECTED);
 
-                if ((Boolean) disconnectMethod.invoke(bluetoothprofile, mDevice)) {
-                    Log.d(TAG, "disconnect successful");
-                } else {
-                    Log.d(TAG, "disconnect failed");
-                }
-
-            } catch (Exception ex) {
-                Log.d("BtAutomationService", ex.getMessage());
+            if (state == BluetoothAdapter.STATE_CONNECTED) {
+                BroadcastConnectionStateChanged(STATE_CONNECTED);
             }
-
-            mBluetoothAdapter.closeProfileProxy(BT_PAN_PROFILE, bluetoothprofile);
-        }
-
-        public void onServiceDisconnected(int i)
-        {
-
+            else if(state == BluetoothAdapter.STATE_DISCONNECTED) {
+                BroadcastConnectionStateChanged(STATE_DISCONNECTED);
+            }
         }
     };
+
+    private void BroadcastConnectionStateChanged(int connectionState) {
+        if (mConnectionState != connectionState) {
+            mConnectionState = connectionState;
+            Log.d(TAG, "Broadcast connection state change: " + connectionState);
+            Intent intent = new Intent(ACTION_CONNECTION_STATE_CHANGED);
+            intent.putExtra(EXTRA_STATE, connectionState);
+            mContext.sendBroadcast(intent);
+        }
+    }
 }

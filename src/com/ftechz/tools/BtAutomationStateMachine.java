@@ -1,24 +1,19 @@
 package com.ftechz.tools;
 
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.util.Log;
 
-import java.lang.reflect.Method;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
 /**
- * Created with IntelliJ IDEA.
- * User: Phil
- * Date: 9/10/12
- * Time: 10:44 PM
- * To change this template use File | Settings | File Templates.
+ * State machine for the BT automation
+ *
+ * This implements an HFSM (Heirachical Finite State Machine)
  */
 public class BtAutomationStateMachine
 {
@@ -26,13 +21,10 @@ public class BtAutomationStateMachine
 
     public static final String TIMEOUT_EVENT =
             "com.ftechz.tools.BtAutomationService.BtAutomationStateMachine.TimeoutEvent";
-    final String ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED";
-    final String ACTION_CONNECTION_STATE = BluetoothProfile.EXTRA_STATE;
     final String WIFI_EVENT_INTENT = WifiManager.NETWORK_STATE_CHANGED_ACTION;
-    final String BT_EVENT_INTENT = BluetoothAdapter.ACTION_STATE_CHANGED;
 
-    final long PENDING_OFF_DELAY = 60 * 4;
-    final long PENDING_ON_DELAY = 60 * 2;
+    final long PENDING_OFF_DELAY = 40;
+    final long PENDING_ON_DELAY = 20;
     final long SEARCHING_TIMEOUT_DELAY = 30;
 
     private Context mContext;
@@ -159,7 +151,7 @@ public class BtAutomationStateMachine
             protected void EnterState(Context context)
             {
                 super.EnterState(context);
-                mBtManager.DisableAdaptor();
+                mBtManager.Disconnect(deviceName);
             }
 
             @Override
@@ -194,13 +186,7 @@ public class BtAutomationStateMachine
             @Override
             protected void EnterState(Context context)
             {
-                super.EnterState(context);
-                if (mBtManager.IsAdaptorEnabled()) {
-                    this.ChangeState(context, searchingState);
-                }
-                else {
-                    this.ChangeState(context, btEnablingState);
-                }
+                this.ChangeState(context, searchingState);
             }
 
             @Override
@@ -218,51 +204,6 @@ public class BtAutomationStateMachine
                 }
             }
 
-
-            /****************************
-             * Bluetooth Enabling State
-             ****************************/
-            private State<EventInfo> btEnablingState = new BtEnablingState();
-
-            private class BtEnablingState extends State<EventInfo>
-            {
-                @Override
-                protected void EnterState(Context context)
-                {
-                    super.EnterState(context);
-
-                    mBtManager.EnableAdaptor();
-
-                    // Start process to look for paired device
-                    // Start timer to max search pair time
-                    StartTimer(SEARCHING_TIMEOUT_DELAY);
-                }
-
-                @Override
-                protected void ExitState()
-                {
-                    super.ExitState();
-                    // Delete timer
-                    StopTimer();
-                }
-
-                @Override
-                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
-                {
-                    // Transition to Connecting state
-                    if (eventInfo.lastIntentString.equals(BT_EVENT_INTENT)) {
-                        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_ON) {
-                            ActiveState.this.ChangeState(mContext,
-                                    ActiveState.this.searchingState);
-                        }
-                    } else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
-                        // Try again on timeout
-                        ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.btEnablingState);
-                    }
-                }
-            }
-
             /******************
              * Searching State
              ******************/
@@ -275,7 +216,7 @@ public class BtAutomationStateMachine
                 {
                     super.EnterState(context);
 
-                    mBtManager.ConnectToDevice(deviceName);
+                    mBtManager.Connect(deviceName);
 
                     // Start process to look for paired device
                     // Start timer to max search pair time
@@ -296,7 +237,7 @@ public class BtAutomationStateMachine
                     // Move to unconnectedState using same conditions as pendingDisconnectState
 
                     // Transition to Connecting state
-                    if (eventInfo.lastIntentString.equals(ACTION_CONNECTION_STATE_CHANGED)) {
+                    if (eventInfo.lastIntentString.equals(BtManager.ACTION_CONNECTION_STATE_CHANGED)) {
                         if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTED) {
 
                             if (mEventInfo.screenOn) {
@@ -327,7 +268,7 @@ public class BtAutomationStateMachine
                     if (!eventInfo.screenOn) {
                         ActiveState.this.ChangeState(mContext,
                                 ActiveState.this.pendingDisconnectState);
-                    } else if (eventInfo.lastIntentString.equals(ACTION_CONNECTION_STATE_CHANGED)) {
+                    } else if (eventInfo.lastIntentString.equals(BtManager.ACTION_CONNECTION_STATE_CHANGED)) {
                         if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_DISCONNECTED) {
                             ActiveState.this.ChangeState(mContext,
                                     ActiveState.this.searchingState);
@@ -392,7 +333,7 @@ public class BtAutomationStateMachine
                 {
                     super.EnterState(context);
 
-                    mBtManager.DisableAdaptor();
+                    mBtManager.Disconnect(deviceName);
 
                     // Create/Start timer
                     StartTimer(PENDING_ON_DELAY);
@@ -412,7 +353,7 @@ public class BtAutomationStateMachine
                     if (eventInfo.screenOn || eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
                         // If screen on or timer expires
                         ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.btEnablingState);
+                                ActiveState.this.searchingState);
                     }
                 }
             }

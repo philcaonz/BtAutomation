@@ -102,20 +102,23 @@ public class BtAutomationService extends Service
                 new IntentFilter(Intent.ACTION_SCREEN_ON));
         registerReceiver(displayActionReceiver,
                 new IntentFilter(Intent.ACTION_SCREEN_OFF));
-        registerReceiver(btActionReceiver,
-                new IntentFilter(BT_EVENT_INTENT));
         registerReceiver(wifiActionReceiver,
                 new IntentFilter(WIFI_EVENT_INTENT));
         registerReceiver(timerEventReceiver,
                 new IntentFilter(BtAutomationStateMachine.TIMEOUT_EVENT));
 
-        registerReceiver(btDeviceActionReceiver,
-                new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED));
-        registerReceiver(btDeviceActionReceiver,
-                new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED));
+        registerReceiver(btActionReceiver,
+                new IntentFilter(BT_EVENT_INTENT));
+//        registerReceiver(btDeviceActionReceiver,
+//                new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED));
+//        registerReceiver(btDeviceActionReceiver,
+//                new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED));
+//
+//        registerReceiver(btDeviceActionReceiver,
+//                new IntentFilter(ACTION_CONNECTION_STATE_CHANGED));
 
-        registerReceiver(btDeviceActionReceiver,
-                new IntentFilter(ACTION_CONNECTION_STATE_CHANGED));
+        registerReceiver(btManagerActionReceiver,
+                new IntentFilter(BtManager.ACTION_CONNECTION_STATE_CHANGED));
     }
 
 
@@ -171,14 +174,38 @@ public class BtAutomationService extends Service
         }
     };
 
-    private BroadcastReceiver btDeviceActionReceiver = new BroadcastReceiver()
+//    private BroadcastReceiver btDeviceActionReceiver = new BroadcastReceiver()
+//    {
+//        @Override
+//        public void onReceive(Context context, Intent intent)
+//        {
+//            if (intent.getAction().equals(ACTION_CONNECTION_STATE_CHANGED)) {
+//                mEventInfo.bluetoothState = intent.getIntExtra(
+//                        ACTION_CONNECTION_STATE, BluetoothAdapter.STATE_DISCONNECTED);
+//                mEventInfo.lastIntentString = intent.getAction();
+//
+//                // Signal state machine
+//                mBtAutomationStateMachine.HandleEvent(mEventInfo);
+//            }
+//        }
+//    };
+
+
+    private BroadcastReceiver btManagerActionReceiver = new BroadcastReceiver()
     {
         @Override
         public void onReceive(Context context, Intent intent)
         {
-            if (intent.getAction().equals(ACTION_CONNECTION_STATE_CHANGED)) {
-                mEventInfo.bluetoothState = intent.getIntExtra(
-                        ACTION_CONNECTION_STATE, BluetoothAdapter.STATE_DISCONNECTED);
+            if (intent.getAction().equals(BtManager.ACTION_CONNECTION_STATE_CHANGED)) {
+                int state = intent.getIntExtra(
+                        BtManager.EXTRA_STATE, BtManager.STATE_DISCONNECTED);
+                if (state == BtManager.STATE_DISCONNECTED) {
+                    mEventInfo.bluetoothState = BluetoothAdapter.STATE_DISCONNECTED;
+                }
+                else {
+                    mEventInfo.bluetoothState = BluetoothAdapter.STATE_CONNECTED;
+                }
+
                 mEventInfo.lastIntentString = intent.getAction();
 
                 // Signal state machine
