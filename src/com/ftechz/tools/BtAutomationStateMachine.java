@@ -1,7 +1,6 @@
 package com.ftechz.tools;
 
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
@@ -23,8 +22,9 @@ public class BtAutomationStateMachine
             "com.ftechz.tools.BtAutomationService.BtAutomationStateMachine.TimeoutEvent";
     final String WIFI_EVENT_INTENT = WifiManager.NETWORK_STATE_CHANGED_ACTION;
 
-    final long PENDING_OFF_DELAY = 40;
-    final long PENDING_ON_DELAY = 20;
+    final long BT_DISCONNECTED_PERIOD = 40;
+    final long BT_CONNECTED_PERIOD = 20;
+    final long BT_SCREEN_OFF_DELAY = 20;
     final long SEARCHING_TIMEOUT_DELAY = 30;
 
     private Context mContext;
@@ -49,38 +49,26 @@ public class BtAutomationStateMachine
     {
         if ((eventInfo.bluetoothState == BluetoothAdapter.STATE_OFF)
                 || (eventInfo.bluetoothState == BluetoothAdapter.STATE_TURNING_ON)) {
-            topLevelState.ChangeState(mContext, topLevelState.inactiveState);
-        } else {
+            topLevelState.ChangeState(mContext, topLevelState.disabledState);
+        }
+        else {
             if (eventInfo.screenOn) {
-                switch (eventInfo.bluetoothState) {
-                    case BluetoothAdapter.STATE_CONNECTED:
-                        topLevelState.activeState.ChangeState(mContext,
-                                topLevelState.activeState.connectedState);
-                        break;
-                    case BluetoothAdapter.STATE_CONNECTING:
-                    case BluetoothAdapter.STATE_TURNING_OFF:
-                    case BluetoothAdapter.STATE_DISCONNECTED:
-                    case BluetoothAdapter.STATE_DISCONNECTING:
-                    case BluetoothAdapter.STATE_ON:
-                        topLevelState.activeState.ChangeState(mContext,
-                                topLevelState.activeState.searchingState);
-                        break;
-                }
-            } else {
-                topLevelState.activeState.ChangeState(mContext,
-                        topLevelState.activeState.pendingDisconnectState);
+                topLevelState.enabledState.ChangeState(mContext,
+                        topLevelState.enabledState.screenOnState);
+            }
+            else {
+                topLevelState.enabledState.ChangeState(mContext,
+                        topLevelState.enabledState.screenOffState);
             }
 
-            topLevelState.ChangeState(mContext, topLevelState.activeState);
+            topLevelState.ChangeState(mContext, topLevelState.enabledState);
         }
     }
-
-
-    private TopLevelState topLevelState = new TopLevelState();
 
     /*****************
      * Top level state
      *****************/
+    private TopLevelState topLevelState = new TopLevelState();
     private class TopLevelState extends State<EventInfo>
     {
         private static final String TAG = "BtAutomationStateMachine.TopLevelState";
@@ -129,7 +117,7 @@ public class BtAutomationStateMachine
         protected void EnterState(Context context)
         {
             super.EnterState(context);
-            this.ChangeState(context, inactiveState);
+            this.ChangeState(context, disabledState);
         }
 
         @Override
@@ -141,11 +129,10 @@ public class BtAutomationStateMachine
 
 
         /*****************
-         * Inactive State
+         * Disabled State
          *****************/
-        public InactiveState inactiveState = new InactiveState();
-
-        public class InactiveState extends State<EventInfo>
+        public DisabledState disabledState = new DisabledState();
+        public class DisabledState extends State<EventInfo>
         {
             @Override
             protected void EnterState(Context context)
@@ -168,7 +155,7 @@ public class BtAutomationStateMachine
                 if (eventInfo.lastIntentString.equals(WIFI_EVENT_INTENT)) {
                     if ((eventInfo.enabled) && !eventInfo.wifiConnected) {
                         TopLevelState.this.ChangeState(mContext,
-                                TopLevelState.this.activeState);
+                                TopLevelState.this.enabledState);
                         this.EventHandled();
                     }
                 }
@@ -177,16 +164,16 @@ public class BtAutomationStateMachine
 
 
         /***************
-         * Active State
+         * Enabled State
          ***************/
-        public ActiveState activeState = new ActiveState();
-
-        public class ActiveState extends State<EventInfo>
+        public EnabledState enabledState = new EnabledState();
+        public class EnabledState extends State<EventInfo>
         {
             @Override
             protected void EnterState(Context context)
             {
-                this.ChangeState(context, searchingState);
+                super.EnterState(context);
+                this.ChangeState(context, screenOnState);
             }
 
             @Override
@@ -198,162 +185,164 @@ public class BtAutomationStateMachine
                     if ((!eventInfo.enabled) || eventInfo.wifiConnected) {
                         TopLevelState.this.ChangeState(
                                 mContext,
-                                TopLevelState.this.inactiveState);
+                                TopLevelState.this.disabledState);
                         this.EventHandled();
                     }
                 }
             }
 
             /******************
-             * Searching State
+             * Screen On State
              ******************/
-            private State<EventInfo> searchingState = new SearchingState();
-
-            private class SearchingState extends State<EventInfo>
+            private State<EventInfo> screenOnState = new ScreenOnState();
+            private class ScreenOnState extends State<EventInfo>
             {
                 @Override
                 protected void EnterState(Context context)
                 {
                     super.EnterState(context);
-
-                    mBtManager.Connect(deviceName);
-
-                    // Start process to look for paired device
-                    // Start timer to max search pair time
-                    StartTimer(SEARCHING_TIMEOUT_DELAY);
+                    if (!mBtManager.IsConnected()) {
+                        mBtManager.Connect(deviceName);
+                    }
                 }
 
-                @Override
-                protected void ExitState()
-                {
-                    super.ExitState();
-                    // Delete timer
-                    StopTimer();
-                }
 
                 @Override
                 protected void EventHandler(EventInfo eventInfo) throws EventHandledException
                 {
-                    // Move to unconnectedState using same conditions as pendingDisconnectState
-
-                    // Transition to Connecting state
-                    if (eventInfo.lastIntentString.equals(BtManager.ACTION_CONNECTION_STATE_CHANGED)) {
-                        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_CONNECTED) {
-
-                            if (mEventInfo.screenOn) {
-                                ActiveState.this.ChangeState(mContext,
-                                        ActiveState.this.connectedState);
-                            } else {
-                                ActiveState.this.ChangeState(mContext,
-                                        ActiveState.this.pendingDisconnectState);
-                            }
-                        }
-                    } else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
-                        ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.unconnectedState);
+                    if (!eventInfo.screenOn) {
+                        EnabledState.this.ChangeState(mContext,
+                                EnabledState.this.screenOffState);
+                        EventHandled();
                     }
                 }
             }
 
             /******************
-             * Connected State
+             * Screen Off State
              ******************/
-            private State<EventInfo> connectedState = new ConnectedState();
-
-            private class ConnectedState extends State<EventInfo>
-            {
-                @Override
-                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
-                {
-                    if (!eventInfo.screenOn) {
-                        ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.pendingDisconnectState);
-                    } else if (eventInfo.lastIntentString.equals(BtManager.ACTION_CONNECTION_STATE_CHANGED)) {
-                        if (mEventInfo.bluetoothState == BluetoothAdapter.STATE_DISCONNECTED) {
-                            ActiveState.this.ChangeState(mContext,
-                                    ActiveState.this.searchingState);
-                        }
-                    }
-
-                    EventHandled();
-                }
-            }
-
-
-            /***************************
-             * Pending Disconnect State
-             ***************************/
-            private State<EventInfo> pendingDisconnectState = new pendingDisconnectState();
-
-            private class pendingDisconnectState extends State<EventInfo>
+            private State<EventInfo> screenOffState = new ScreenOffState();
+            private class ScreenOffState extends State<EventInfo>
             {
                 @Override
                 protected void EnterState(Context context)
                 {
                     super.EnterState(context);
-                    // Create/Start timer
-                    StartTimer(PENDING_OFF_DELAY);
+                    this.ChangeState(context, screenOffDelayState);
                 }
 
-                @Override
-                protected void ExitState()
-                {
-                    super.ExitState();
-                    // Delete timer
-                    StopTimer();
-                }
 
                 @Override
                 protected void EventHandler(EventInfo eventInfo) throws EventHandledException
                 {
                     if (eventInfo.screenOn) {
-                        // Screen turns on
-                        ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.connectedState);
-                    } else if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
-                        // If timer expires
-                        ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.unconnectedState);
+                        EnabledState.this.ChangeState(mContext,
+                                EnabledState.this.screenOnState);
+                        EventHandled();
+                    }
+                }
+
+                /******************
+                 * Screen Off Delay State
+                 ******************/
+                private State<EventInfo> screenOffDelayState = new ScreenOffDelayState();
+                private class ScreenOffDelayState extends State<EventInfo>
+                {
+                    @Override
+                    protected void EnterState(Context context)
+                    {
+                        super.EnterState(context);
+
+                        // Create/Start timer
+                        StartTimer(BT_SCREEN_OFF_DELAY);
                     }
 
-                    EventHandled();
-                }
-            }
+                    @Override
+                    protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                    {
+                        if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
+                            // If timer expires
+                            ScreenOffState.this.ChangeState(mContext,
+                                    ScreenOffState.this.btDisconnectedState);
+                        }
+                    }
 
-
-            /********************
-             * Unconnected State
-             ********************/
-            private State<EventInfo> unconnectedState = new UnconnectedState();
-
-            private class UnconnectedState extends State<EventInfo>
-            {
-                @Override
-                protected void EnterState(Context context)
-                {
-                    super.EnterState(context);
-
-                    mBtManager.Disconnect(deviceName);
-
-                    // Create/Start timer
-                    StartTimer(PENDING_ON_DELAY);
+                    @Override
+                    protected void ExitState() {
+                        super.ExitState();
+                        StopTimer();
+                    }
                 }
 
-                @Override
-                protected void ExitState()
+                /******************
+                 * Bluetooth Disconnected State
+                 ******************/
+                private State<EventInfo> btDisconnectedState = new BtDisconnectedState();
+                private class BtDisconnectedState extends State<EventInfo>
                 {
-                    super.ExitState();
-                    // Delete timer
-                    StopTimer();
+                    @Override
+                    protected void EnterState(Context context)
+                    {
+                        super.EnterState(context);
+
+                        // Create/Start timer
+                        StartTimer(BT_DISCONNECTED_PERIOD);
+
+                        if (mBtManager.IsConnected()) {
+                            mBtManager.Disconnect(deviceName);
+                        }
+                    }
+
+                    @Override
+                    protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                    {
+                        if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
+                            // If timer expires
+                            ScreenOffState.this.ChangeState(mContext,
+                                    ScreenOffState.this.btConnectedState);
+                        }
+                    }
+
+                    @Override
+                    protected void ExitState() {
+                        super.ExitState();
+                        StopTimer();
+                    }
                 }
 
-                @Override
-                protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                /******************
+                 * Bluetooth Connected State
+                 ******************/
+                private State<EventInfo> btConnectedState = new BtConnectedState();
+                private class BtConnectedState extends State<EventInfo>
                 {
-                    if (eventInfo.screenOn || eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
-                        // If screen on or timer expires
-                        ActiveState.this.ChangeState(mContext,
-                                ActiveState.this.searchingState);
+                    @Override
+                    protected void EnterState(Context context)
+                    {
+                        super.EnterState(context);
+
+                        // Create/Start timer
+                        StartTimer(BT_CONNECTED_PERIOD);
+
+                        if (!mBtManager.IsConnected()) {
+                            mBtManager.Connect(deviceName);
+                        }
+                    }
+
+                    @Override
+                    protected void EventHandler(EventInfo eventInfo) throws EventHandledException
+                    {
+                        if (eventInfo.lastIntentString.equals(TIMEOUT_EVENT)) {
+                            // If timer expires
+                            ScreenOffState.this.ChangeState(mContext,
+                                    ScreenOffState.this.btDisconnectedState);
+                        }
+                    }
+
+                    @Override
+                    protected void ExitState() {
+                        super.ExitState();
+                        StopTimer();
                     }
                 }
             }

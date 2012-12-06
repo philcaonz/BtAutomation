@@ -73,7 +73,7 @@ public class BtHelper {
         if (device != null) {
             mDevice = device;
             mBluetoothAdapter.getProfileProxy(mContext,
-                    btdisconnectServiceListener, BT_PAN_PROFILE);
+                    btDisconnectServiceListener, BT_PAN_PROFILE);
         }
     }
 
@@ -131,7 +131,7 @@ public class BtHelper {
     };
 
 
-    BluetoothProfile.ServiceListener btdisconnectServiceListener = new BluetoothProfile.ServiceListener()
+    BluetoothProfile.ServiceListener btDisconnectServiceListener = new BluetoothProfile.ServiceListener()
     {
         public void onServiceConnected(int i, BluetoothProfile bluetoothprofile)
         {
