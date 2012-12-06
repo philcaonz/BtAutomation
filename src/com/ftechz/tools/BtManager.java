@@ -9,6 +9,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.util.Log;
 
+import java.util.Timer;
+import java.util.TimerTask;
+
 /**
  * Created with IntelliJ IDEA.
  * User: phillip
@@ -29,11 +32,13 @@ public class BtManager {
     public static final int STATE_DISCONNECTED = 0;
     public static final int STATE_CONNECTED = 1;
 
+    private static final int BT_CONNECT_RETRY_MS = 2* 1000;
 
     private Context mContext;
     private boolean mDisableOnDisconnect = true;
     private String mConnectDeviceName = "";
     private boolean mConnectEnable = false;
+    private Timer mConnectionTimer;
 
     private int mConnectionState = STATE_DISCONNECTED;
 
@@ -44,6 +49,23 @@ public class BtManager {
         mContext = context;
         mBtHelper = new BtHelper(context);
         registerEventHandlers(context);
+
+        mConnectionTimer = new Timer(true);
+        mConnectionTimer.schedule(new TimeoutTask(), BT_CONNECT_RETRY_MS);
+    }
+
+    private class TimeoutTask extends TimerTask
+    {
+        @Override
+        public void run()
+        {
+            if (mConnectEnable) {
+                if (!IsConnected()) {
+                    Log.d(TAG, "BT reconnecting");
+                    Connect(mConnectDeviceName);
+                }
+            }
+        }
     }
 
     public void Connect(String deviceName)
@@ -66,6 +88,9 @@ public class BtManager {
 
     public void Disconnect(String deviceName)
     {
+        mConnectDeviceName = deviceName;
+        mConnectEnable = false;
+
         if (mDisableOnDisconnect) {
             mBtHelper.DisableAdaptor();
         }

@@ -17,6 +17,8 @@ import android.net.wifi.WifiManager;
 import android.os.Binder;
 import android.os.IBinder;
 
+import java.util.Timer;
+
 /**
  * Created with IntelliJ IDEA.
  * User: Phil
