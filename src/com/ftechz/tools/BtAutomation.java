@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothAdapter;
 import android.content.*;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 
 public class BtAutomation extends Activity
@@ -24,6 +26,37 @@ public class BtAutomation extends Activity
 
         registerReceiver(stateEnterEventReceiver,
                 new IntentFilter(State.ENTER_STATE_EVENT));
+
+
+        final Button connectionEnableBtn = (Button) findViewById(R.id.conEnable);
+        final Button connectionDisableBtn = (Button) findViewById(R.id.conDisable);
+        final Button simScreenOnBtn = (Button) findViewById(R.id.simScreenOn);
+        final Button simScreenOffBtn = (Button) findViewById(R.id.simScreenOff);
+
+        connectionEnableBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+
+            }
+        });
+
+        connectionDisableBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                // Do something in response to button click
+            }
+        });
+
+        simScreenOnBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                mBinder.SimulateScreenOn();
+            }
+        });
+
+        simScreenOffBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                mBinder.SimulateScreenOff();
+            }
+        });
+
     }
 
     private BroadcastReceiver stateEnterEventReceiver = new BroadcastReceiver()

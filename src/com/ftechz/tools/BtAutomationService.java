@@ -289,6 +289,16 @@ public class BtAutomationService extends Service
 
     public class BtAutomationServiceBinder extends Binder
     {
+        public void SimulateScreenOn()
+        {
+            mEventInfo.screenOn = true;
+            mBtAutomationStateMachine.HandleEvent(mEventInfo);
+        }
 
+        public void SimulateScreenOff()
+        {
+            mEventInfo.screenOn = false;
+            mBtAutomationStateMachine.HandleEvent(mEventInfo);
+        }
     }
 }
